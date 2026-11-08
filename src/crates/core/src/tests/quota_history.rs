@@ -240,7 +240,11 @@ fn a_history_names_the_models_whose_calls_spend_each_window() {
     };
     core.set_account_projection(AccountProjection {
         quotas: vec![
-            window("weekly", json!({"allModels": true})),
+            window(
+                "weekly",
+                json!({"allModels":true,"windowDurationSeconds":604_800,
+                "resetAt":iso(now + 6 * 86_400_000)}),
+            ),
             window("opus", json!({"modelFamilies": ["opus"]})),
             json!({"id":"cursor:a:plan","vendor":"cursor","accountId":"cursor:a","name":"Plan",
                    "usedPercent":5.0,"observedAt":iso(now - 60_000)}),
@@ -272,4 +276,13 @@ fn a_history_names_the_models_whose_calls_spend_each_window() {
     let named = history["models"].as_array().unwrap();
     assert_eq!(named.len(), 2);
     assert!(named[0]["name"].as_str().unwrap().contains("Opus"));
+    let selected = core.request("quota_history",
+        json!({"from":now - 3_600_000,"to":now,"cycleWindowId":"claude:a:weekly","cyclePage":0})).unwrap();
+    let windows = selected["windows"].as_array().unwrap();
+    assert_eq!(windows.len(), 1);
+    assert_eq!(windows[0]["cycleCount"], 1);
+    let reference = &windows[0]["cycles"][0]["reference"];
+    assert_eq!(reference["tokens"], 2_200);
+    assert_eq!(reference["estimatedTokens"], 22_000.0);
+    assert!(reference["amounts"]["USD"].as_f64().unwrap() > 0.0);
 }

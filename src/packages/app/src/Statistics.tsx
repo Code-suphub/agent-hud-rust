@@ -15,6 +15,7 @@ import {
 import { dimensionsLabel, freshKinds, themeFor } from "./statistics/StatsTheme";
 import { useStatisticsEnd } from "./statistics/use-statistics-end";
 import { useProviderHighlight } from "./statistics/use-provider-highlight";
+import { QuotaCycles } from "./statistics/dashboard/QuotaCycles";
 import { quotaRows } from "./statistics/dashboard/QuotaRows";
 import { TokenUsage } from "./statistics/TokenUsage";
 import { AgentCards } from "./statistics/AgentCards";
@@ -265,6 +266,13 @@ export default function Statistics({
           light={light}
         />
         <div className="stats-area-cards">
+          <QuotaCycles
+            windows={rows.map(({ window }) => window)}
+            end={end}
+            active={active}
+            action={action}
+            theme={theme}
+          />
           <AgentCards
             data={data}
             hiddenAgentCards={hiddenAgentCards}

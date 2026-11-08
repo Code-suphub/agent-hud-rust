@@ -13,6 +13,7 @@ use rusqlite::params;
 use std::collections::BTreeSet;
 
 pub(crate) mod cycles;
+mod usage;
 
 /// The furthest a history reaches back: what `quota_sample` keeps.
 pub(crate) const KEPT_MS: i64 = 372 * 86_400_000;
@@ -86,23 +87,6 @@ impl AgentHudCore {
             }
             Ok(samples)
         };
-        // A window's readings back to a whole length before the stretch, so
-        // the cycle it starts in is whole.
-        let read_since = |id: &str, since: i64| -> rusqlite::Result<Vec<cycles::Reading>> {
-            let mut statement = db.prepare_cached(
-                "SELECT observed_at_ms,remaining,reset_at_ms FROM quota_sample
-                 WHERE window_id=?1 AND observed_at_ms>=?2 AND observed_at_ms<=?3
-                 ORDER BY observed_at_ms",
-            )?;
-            let rows = statement.query_map(params![id, since, to], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    (100.0 - r.get::<_, f64>(1)?).clamp(0.0, 100.0),
-                    r.get::<_, Option<i64>>(2)?,
-                ))
-            })?;
-            rows.collect()
-        };
         let now = Utc::now().timestamp_millis();
         // The models the ledger recorded calls of in the stretch, by source
         // and model as recorded.
@@ -129,6 +113,12 @@ impl AgentHudCore {
             let Some(id) = row["id"].as_str() else {
                 continue;
             };
+            if params["cycleWindowId"]
+                .as_str()
+                .is_some_and(|selected| selected != id)
+            {
+                continue;
+            }
             let vendor = row["vendor"].as_str().unwrap_or_default();
             if vendors.insert(vendor) {
                 agents.push(json!({"id": vendor, "name": vendor_name(vendor)}));
@@ -160,17 +150,8 @@ impl AgentHudCore {
             let reset = row["resetAt"].as_str().and_then(metering::date_ms);
             let cycle_start = reset.zip(length).map(|(reset, length)| reset - length);
             let (segments, resets) = history(&samples, from, to, bin, cycle_start, length);
-            let span = read_since(id, from - length.unwrap_or(7 * 86_400_000)).map_err(|_| {
-                l10n::text(
-                    "无法从本地数据库读取额度记录",
-                    "Quota history could not be read from SQLite",
-                )
-            })?;
-            let cycles = cycles::cycles(&span, length, reset)
-                .into_iter()
-                .filter(|cycle| cycle.end > from)
-                .map(|cycle| cycle.json(now))
-                .collect::<Vec<_>>();
+            let (cycles, cycle_count) =
+                self.cycle_rows(db, row, &params, [from, to, now], length, reset)?;
             windows.push(json!({
                 "id": id,
                 "vendor": row["vendor"],
@@ -189,6 +170,7 @@ impl AgentHudCore {
                     .collect::<Vec<_>>(),
                 "resets": resets,
                 "cycles": cycles,
+                "cycleCount": cycle_count,
                 "models": spending,
             }));
         }

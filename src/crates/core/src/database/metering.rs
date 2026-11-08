@@ -174,7 +174,7 @@ pub(crate) struct View {
     pub loaded_at: i64,
     pub valid_until: Option<i64>,
     /// The selected logs the parts were read for, sorted.
-    selection: Vec<String>,
+    pub(crate) selection: Vec<String>,
     parts: HashMap<String, Part>,
     /// (source, model) pairs the parts' rows name by index.
     keys: Vec<(String, String)>,
