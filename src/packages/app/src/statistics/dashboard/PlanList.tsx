@@ -1,5 +1,10 @@
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
-import { listCost, listPrice, moneyShort } from "@agent-hud/ui/format";
+import {
+  balanceAmount,
+  listCost,
+  listPrice,
+  moneyShort,
+} from "@agent-hud/ui/format";
 import type { BillingAccount, PlanValueResponse } from "@agent-hud/protocol";
 import { vendorKey } from "@agent-hud/hud/model";
 import { number, row, truncate, type StatsTheme } from "../StatsTheme";
@@ -193,7 +198,9 @@ export function PlanList({
                 </span>
               </span>
               <span style={{ ...number, fontSize: 17, fontWeight: 600 }}>
-                {moneyShort(balance.amount, balance.currency, language)}
+                {balance.precision != null || balance.total != null
+                  ? balanceAmount(balance, language)
+                  : moneyShort(balance.amount, balance.currency, language)}
               </span>
             </div>
             <span style={{ fontSize: 11, color: theme.secondary }}>

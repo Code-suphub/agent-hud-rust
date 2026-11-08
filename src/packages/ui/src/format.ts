@@ -22,6 +22,7 @@ export {
   tokensInOut,
   tokensShort,
 } from "./format/numbers.ts";
+export { balanceAmount } from "./format/balance.ts";
 export {
   listCost,
   listPrice,

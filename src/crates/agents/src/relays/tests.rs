@@ -425,3 +425,29 @@ fn a_relay_both_clients_use_is_read_once() {
         "once, with the first client's key"
     );
 }
+
+#[test]
+fn custom_balance_previews_fields_and_uses_only_its_saved_headers() {
+    let url = "https://m.example.com/balance";
+    let response = json!({"data":{"available":"16.125","limit":50},"label":"sample"});
+    let mut host = FakeHost::new("/u").answer(url, Ok(response));
+    let headers = json!({"authorization":"Bearer fixture","cookie":"sid=fixture"});
+    let preview = super::preview(&host, url, &headers, &json!(["authorization"])).unwrap();
+    assert_eq!(
+        preview,
+        json!({"fields":["data.available","data.limit"],"headers":["authorization"]})
+    );
+    host.saved = Ok(Some(json!({"sources":[
+        {"id":"custom-1","name":"Test credits","baseUrl":url,"kind":"custom","key":"",
+          "headers":headers,"custom":{"url":"/balance","remaining":"data.available","total":"data.limit","currency":"credits","precision":0}},
+        {"id":"custom-2","baseUrl":url,"kind":"custom","key":"","headers":{},
+          "custom":{"url":"/balance","remaining":"data.limit","currency":"USD"}}
+    ]})));
+    let reading = read(&host).unwrap();
+    assert_eq!(reading.billing.len(), 2);
+    assert_eq!(reading.billing[0]["amount"], 16.125);
+    assert_eq!(reading.billing[0]["total"], 50.0);
+    assert_eq!(reading.billing[0]["precision"], 0);
+    assert_eq!(reading.services[0]["standalone"], true);
+    assert!(!reading.services[0].to_string().contains("fixture"));
+}

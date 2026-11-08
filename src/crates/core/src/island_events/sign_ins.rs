@@ -43,4 +43,21 @@ impl Tracker {
             self.push(&format!("{id}:sign-in:{at}"),json!({"kind":"sign-in-needed","islandAlert":true,"at":iso(now),"source":id,"title":provider["name"],"message":status["notice"]}));
         }
     }
+    pub(crate) fn relay_sign_ins(&mut self, relays: &[Value], now: i64) {
+        self.relay_sign_ins
+            .retain(|id| relays.iter().any(|row| row["id"] == id.as_str()));
+        for row in relays.iter().filter(|row| row["standalone"] == true) {
+            let Some(id) = row["id"].as_str() else {
+                continue;
+            };
+            if row["balance"].is_object() {
+                self.relay_sign_ins.remove(id);
+            } else if row["authRequired"] == true && self.relay_sign_ins.insert(id.to_owned()) {
+                let title = row["name"].as_str().or_else(|| row["provider"].as_str());
+                self.push(id, json!({"kind":"sign-in-needed","islandAlert":true,"at":iso(now),
+                    "source":"relay","accountId":id,"title":title,
+                    "message":l10n::text("余额接口拒绝了当前认证，请更新凭据。", "The balance source rejected its credentials. Update them to resume reading.")}));
+            }
+        }
+    }
 }

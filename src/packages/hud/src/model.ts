@@ -12,6 +12,7 @@ import { heldUsed } from "./held-reading.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
 import {
+  balanceAmount,
   moneyAmount,
   snapshotLanguage,
   quotaPercentLabel,
@@ -166,11 +167,7 @@ export function vendorsFromSnapshot(
             )
             .join(" · ")
         : balance
-          ? moneyAmount(
-              balance.amount,
-              balance.currency,
-              snapshotLanguage(snapshot),
-            )
+          ? balanceAmount(balance, snapshotLanguage(snapshot))
           : null,
       usage:
         quotas.length || balance

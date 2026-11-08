@@ -111,6 +111,15 @@ impl AccountService {
         self.credentials_changed(params);
         Ok(result)
     }
+    pub fn preview_relay_source(&self, params: &Value) -> Result<Value, String> {
+        let _turn = self.gate.try_lock().map_err(|_| {
+            agent_hud_core::l10n::text(
+                "正在读取其他账户，请稍后重试",
+                "Another account is being read; try again shortly",
+            )
+        })?;
+        credentials::preview(&self.context, params)
+    }
     /// Adds a relay by hand (`credentials::add_relay_source`) and reads it.
     pub fn add_relay_source(&self, params: &Value) -> Result<Value, String> {
         let result = credentials::add_relay_source(&self.context, params)?;

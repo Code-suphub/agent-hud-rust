@@ -31,6 +31,7 @@ impl Runtime {
                 | "set_credentials"
                 | "remove_credentials"
                 | "add_relay_source"
+                | "preview_relay_source"
                 | "set_relay_kind"
                 | "remove_relay_source"
                 | "web_sign_out"
@@ -42,6 +43,7 @@ impl Runtime {
             return match method {
                 "credentials_status" => Ok(accounts.credentials_status()),
                 "set_credentials" => accounts.set_credentials(&params),
+                "preview_relay_source" => accounts.preview_relay_source(&params),
                 "add_relay_source" => accounts.add_relay_source(&params),
                 "set_relay_kind" => accounts.set_relay_kind(&params),
                 "remove_relay_source" => accounts.remove_relay_source(&params),

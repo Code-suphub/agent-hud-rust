@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { DollarSign, Flame, Percent } from "lucide-react";
 import type { PanelBlockLayout, Snapshot } from "@agent-hud/protocol";
-import { dateFormat, localeDateTime, moneyAmount } from "@agent-hud/ui/format";
+import {
+  balanceAmount,
+  dateFormat,
+  localeDateTime,
+  moneyAmount,
+} from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePanelServices } from "../PanelContext";
 import { useGround } from "../ground";
@@ -80,7 +85,7 @@ export function SourceBalances({
                   {
                     name:
                       account.label || (language === "zh" ? "余额" : "Balance"),
-                    value: money(account.amount, account.currency),
+                    value: balanceAmount(account, language),
                   },
                   {
                     name: language === "zh" ? "估算花费" : "Estimated cost",

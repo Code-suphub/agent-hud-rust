@@ -14,6 +14,8 @@
 //! template for that address, or describe its balance endpoint
 //! (`custom`); every request still goes only to the relay's own host.
 mod balance;
+mod custom;
+pub use custom::preview;
 mod new_api;
 
 use crate::account::{Host, Provider, Reading, Unread};
@@ -48,6 +50,8 @@ struct Target {
     /// The key it is read with: the one added by hand, else the first
     /// client's.
     key: String,
+    headers: Value,
+    standalone: bool,
     /// The clients configured with it (`claude`, `codex`).
     clients: Vec<String>,
     /// The routes its calls are recorded under: its host, the Codex
@@ -69,8 +73,12 @@ impl Target {
         Target {
             origin: format!("https://{host}"),
             choice: Choice::of(kinds, &host, legacy),
+            standalone: legacy.is_some_and(|source| source["kind"] == "custom"),
             host,
             key,
+            headers: legacy
+                .map(|row| row["headers"].clone())
+                .unwrap_or(Value::Null),
             clients: Vec::new(),
             routes,
             manual: None,
@@ -100,7 +108,12 @@ impl Choice {
     /// The owner's choice for `relay` in `kinds`, else what a relay added by
     /// hand said before choices were kept by address, else `auto`.
     fn of(kinds: &Value, relay: &str, legacy: Option<&Value>) -> Choice {
-        [Some(&kinds[relay]), legacy]
+        let options = if legacy.is_some_and(|source| source["kind"] == "custom") {
+            [legacy, Some(&kinds[relay])]
+        } else {
+            [Some(&kinds[relay]), legacy]
+        };
+        options
             .into_iter()
             .flatten()
             .find_map(|said| {
@@ -122,7 +135,9 @@ struct Balance {
     kind: &'static str,
     label: String,
     amount: f64,
-    currency: &'static str,
+    currency: String,
+    total: Option<f64>,
+    precision: Option<u64>,
 }
 
 /// What reading a relay found: its balance, a New API site's price list,
@@ -131,6 +146,7 @@ struct Found {
     balance: Result<Balance, String>,
     prices: Option<Value>,
     recognized: bool,
+    auth_required: bool,
 }
 
 /// The relays the clients send their calls through. A relay is read sooner
@@ -147,6 +163,9 @@ pub fn read(host: &dyn Host) -> Result<Reading, Unread> {
         let mut service = json!({"provider": target.host, "product": "relay", "clients": target.clients, "routes": target.routes, "consented": consented});
         if let Some(manual) = &target.manual {
             service["manual"] = json!(true);
+            if target.standalone {
+                service["standalone"] = json!(true);
+            }
             service["id"] = json!(manual.id);
             if !manual.name.is_empty() {
                 service["name"] = json!(manual.name);
@@ -167,28 +186,29 @@ pub fn read(host: &dyn Host) -> Result<Reading, Unread> {
             if !read.recognized {
                 service["unrecognized"] = json!(true);
             }
+            if read.auth_required {
+                service["authRequired"] = json!(true);
+            }
             match read.balance {
                 Ok(mut found) => {
                     service["kind"] = json!(found.kind);
                     if let Some(manual) = target.manual.as_ref().filter(|m| !m.name.is_empty()) {
                         found.label = manual.name.clone();
                     }
-                    let amount = (found.amount * 100.0).round() / 100.0;
-                    service["balance"] =
-                        json!({"label": found.label, "amount": amount, "currency": found.currency});
-                    // One balance per relay; the core shows it under every
-                    // agent that uses it.
-                    reading.billing.push(json!({
-                        "id": format!("relay:{}", target.host),
-                        "vendor": "relay",
-                        "relay": target.host,
-                        "clients": target.clients,
-                        "consumerRoutes": target.routes,
-                        "label": found.label,
-                        "amount": amount,
-                        "currency": found.currency,
-                        "available": true,
-                    }));
+                    let balance = custom::display(&found);
+                    service["balance"] = balance.clone();
+                    let mut billing = balance;
+                    billing["vendor"] = json!("relay");
+                    if let Some(manual) = target.manual.as_ref().filter(|_| target.standalone) {
+                        billing["id"] = json!(format!("balance:{}", manual.id));
+                    } else {
+                        billing["id"] = json!(format!("relay:{}", target.host));
+                        billing["relay"] = json!(target.host);
+                        billing["clients"] = json!(target.clients);
+                        billing["consumerRoutes"] = json!(target.routes);
+                    }
+                    billing["available"] = json!(true);
+                    reading.billing.push(billing);
                 }
                 Err(notice) => service["notice"] = json!(notice),
             }
@@ -212,7 +232,7 @@ fn targets(host: &dyn Host) -> Result<Vec<Target>, Unread> {
         let Some(relay) = base_url_host(&base) else {
             continue;
         };
-        if found.iter().any(|t| t.host == relay) {
+        if source["kind"] != "custom" && found.iter().any(|t| t.host == relay && !t.standalone) {
             continue;
         }
         let mut target = Target::new(relay, key, kinds, Some(source));
@@ -237,7 +257,7 @@ fn targets(host: &dyn Host) -> Result<Vec<Target>, Unread> {
         if key.bytes().any(|byte| matches!(byte, 0 | b'\r' | b'\n')) {
             return;
         }
-        let at = match found.iter().position(|t| t.host == relay) {
+        let at = match found.iter().position(|t| t.host == relay && !t.standalone) {
             Some(at) => at,
             None => {
                 found.push(Target::new(relay, key.to_owned(), kinds, None));

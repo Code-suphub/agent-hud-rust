@@ -108,6 +108,8 @@ export interface BillingAccount {
   amount: number;
   currency: string;
   notice: string | null;
+  total?: number;
+  precision?: number;
   /** From Core (Open's AlertPolicy.balanceLevel): critical at or below zero or while the service refuses the balance, warning at or below its currency's line. */
   level?: "normal" | "warning" | "critical";
   metrics?: {

@@ -39,7 +39,7 @@ impl crate::AgentHudCore {
             .accounts
             .services
             .iter()
-            .filter(|row| row["product"] == "relay")
+            .filter(|row| row["product"] == "relay" && row["standalone"] != true)
             .collect::<Vec<_>>();
         if relays.is_empty() {
             return HashMap::new();
@@ -99,6 +99,7 @@ impl crate::AgentHudCore {
                 row["checkedAt"] = checked.clone().unwrap_or(Value::Null);
                 row["agents"] = json!(row["provider"]
                     .as_str()
+                    .filter(|_| row["standalone"] != true)
                     .and_then(|host| relay_users.get(host))
                     .cloned()
                     .unwrap_or_default());

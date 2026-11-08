@@ -2,7 +2,10 @@
 
 /** A price per million tokens; an empty cache rate takes the input's. */
 export interface CustomPrice {
-  currency: "USD" | "CNY";
+  currency: string;
+  total?: string;
+  precision?: number;
+  website?: string;
   input: number;
   output: number;
   cacheRead: number | null;
@@ -48,7 +51,14 @@ export interface RelaySource {
   agents: string[];
   consented: boolean;
   /** What it last reported, in its own money. */
-  balance?: { label: string; amount: number; currency: string };
+  balance?: {
+    label: string;
+    amount: number;
+    currency: string;
+    total?: number;
+    precision?: number;
+  };
+  authRequired?: boolean;
   /** Which template answered: newapi, sub2api, openrouter, custom. */
   kind?: string;
   /** Why no balance was read. */
@@ -71,6 +81,9 @@ export interface RelayCustom {
   url: string;
   remaining: string;
   divisor: number;
-  currency: "USD" | "CNY";
+  currency: string;
+  total?: string;
+  precision?: number;
+  website?: string;
   header?: string | null;
 }

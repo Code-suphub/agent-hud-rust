@@ -3,7 +3,6 @@
 use super::new_api::{new_api, new_api_prices};
 use super::{Balance, Found, Target};
 use crate::account::{Host, HttpFailure, HttpRequest};
-use crate::endpoints::base_url_host;
 use crate::l10n;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -32,9 +31,14 @@ pub(super) fn balance(host: &dyn Host, target: &Target) -> Found {
         balance,
         prices: None,
         recognized: true,
+        auth_required: false,
     };
     if kind == "custom" {
-        return known(custom_balance(host, target, &target.choice.custom));
+        let (balance, auth_required) = super::custom::read(host, target);
+        return Found {
+            auth_required,
+            ..known(balance)
+        };
     }
     if kind == "openrouter" || (kind == "auto" && target.host == "openrouter.ai") {
         return known(openrouter(target, &ask));
@@ -64,6 +68,7 @@ pub(super) fn balance(host: &dyn Host, target: &Target) -> Found {
             balance,
             prices,
             recognized: true,
+            auth_required: false,
         };
     }
     let usage = ask(&format!("{}/v1/usage", target.origin), true);
@@ -86,7 +91,9 @@ pub(super) fn balance(host: &dyn Host, target: &Target) -> Found {
                     kind: "sub2api",
                     label: target.host.clone(),
                     amount,
-                    currency,
+                    currency: currency.into(),
+                    total: None,
+                    precision: None,
                 });
             return known(balance);
         }
@@ -104,71 +111,8 @@ pub(super) fn balance(host: &dyn Host, target: &Target) -> Found {
         )),
         prices: None,
         recognized: false,
+        auth_required: false,
     }
-}
-
-/// A relay with its own balance endpoint: a GET of `url` (a path on the
-/// relay, or an HTTPS address on its host) with the key as a bearer token or
-/// in the named `header`, whose JSON holds what is left at `remaining` (a
-/// path like `data.balance` or `data.items[0].left`), divided by `divisor`,
-/// in `currency`.
-fn custom_balance(host: &dyn Host, target: &Target, custom: &Value) -> Result<Balance, String> {
-    let endpoint = custom["url"].as_str().unwrap_or("");
-    let url = if endpoint.starts_with('/') {
-        format!("{}{endpoint}", target.origin)
-    } else if endpoint.starts_with("https://")
-        && base_url_host(endpoint).as_deref() == Some(target.host.as_str())
-    {
-        endpoint.to_owned()
-    } else {
-        return Err(l10n::text(
-            "余额接口必须在中转站自己的地址上",
-            "The balance endpoint must be on the relay's own address.",
-        ));
-    };
-    let bearer = format!("Bearer {}", target.key);
-    let secret = match custom["header"].as_str().filter(|h| !h.is_empty()) {
-        Some(header) if !header.eq_ignore_ascii_case("authorization") => {
-            (header, target.key.as_str())
-        }
-        _ => ("Authorization", bearer.as_str()),
-    };
-    let body = host
-        .http_json(&HttpRequest {
-            url: &url,
-            secrets: &[secret],
-            headers: &[],
-            body: None,
-            timeout: Duration::from_secs(12),
-        })
-        .map_err(failure)?;
-    let found = json_path(&body, custom["remaining"].as_str().unwrap_or("")).ok_or_else(|| {
-        l10n::text(
-            "余额接口的返回里没有找到这个字段",
-            "The balance endpoint's answer has nothing at that path.",
-        )
-    })?;
-    let amount = found
-        .as_f64()
-        .or_else(|| found.as_str().and_then(|text| text.trim().parse().ok()))
-        .ok_or_else(|| {
-            l10n::text(
-                "余额接口返回的余额不是数字",
-                "The balance endpoint's balance is not a number.",
-            )
-        })?;
-    let divisor = custom["divisor"]
-        .as_f64()
-        .filter(|d| *d > 0.0)
-        .unwrap_or(1.0);
-    let currency =
-        currency(custom["currency"].as_str().unwrap_or("USD")).ok_or_else(unsupported_unit)?;
-    Ok(Balance {
-        kind: "custom",
-        label: target.host.clone(),
-        amount: amount / divisor,
-        currency,
-    })
 }
 
 /// The value at a dotted path with optional indices (`data.items[0].left`).
@@ -218,7 +162,9 @@ fn openrouter(
             target.host.clone()
         },
         amount,
-        currency: "USD",
+        currency: "USD".into(),
+        total: None,
+        precision: None,
     })
 }
 

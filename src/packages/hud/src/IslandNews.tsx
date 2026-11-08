@@ -144,7 +144,8 @@ export function useIslandNews(
       : fresh.filter(
           (event) =>
             event.islandAlert !== false &&
-            shown.includes(vendorKey(event.source)) &&
+            (shown.includes(vendorKey(event.source)) ||
+              (event.source === "relay" && event.kind === "sign-in-needed")) &&
             (event.kind !== "completion" ||
               (services?.sources?.[sourceID(snapshot, event.source)]?.live !==
                 false &&

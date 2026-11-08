@@ -49,6 +49,7 @@ export interface TextInputProps {
   value: string;
   change: (value: string) => void;
   placeholder?: string;
+  list?: string;
   secret?: boolean;
   decimal?: boolean;
   width?: number | string;
@@ -64,6 +65,7 @@ export function TextInput({
   value,
   change,
   placeholder,
+  list,
   secret = false,
   decimal = false,
   width = 220,
@@ -83,6 +85,7 @@ export function TextInput({
       inputMode={decimal ? "decimal" : undefined}
       value={value}
       placeholder={placeholder}
+      list={list}
       disabled={disabled}
       autoFocus={autoFocus}
       onChange={(event) => change(event.target.value)}

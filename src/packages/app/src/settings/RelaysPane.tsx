@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { Switch } from "@agent-hud/ui/components/switch";
-import { moneyAmount, snapshotLanguage } from "@agent-hud/ui/format";
+import { balanceAmount, snapshotLanguage } from "@agent-hud/ui/format";
 import type { RelaySource } from "@agent-hud/protocol";
 import { LinkButton, SmallButton, Unavailable } from "./SettingsControls";
 import {
@@ -12,6 +12,7 @@ import {
   useText,
   type SettingsPaneProps,
 } from "./SettingsPrimitives";
+import { CustomRelayForm } from "./CustomRelayForm";
 import { RelayForm, RelayKindForm } from "./RelayForms";
 import { usePending } from "./use-pending";
 
@@ -28,6 +29,7 @@ export function RelaysPane({ snapshot, action }: SettingsPaneProps) {
   const language = snapshotLanguage(snapshot);
   const { pending, error, run: perform } = usePending();
   const [adding, setAdding] = useState(false);
+  const [custom, setCustom] = useState<RelaySource | "new" | null>(null);
   // The relay address whose type is being chosen by hand.
   const [choosing, setChoosing] = useState<string | null>(null);
   const relays = snapshot.relays ?? [];
@@ -74,9 +76,10 @@ export function RelaysPane({ snapshot, action }: SettingsPaneProps) {
     if (!agreed) return undefined;
     if (relay.balance)
       return t(
-        `Balance ${moneyAmount(relay.balance.amount, relay.balance.currency, language)}`,
-        `余额 ${moneyAmount(relay.balance.amount, relay.balance.currency, language)}`,
+        `Balance ${balanceAmount(relay.balance, language)}`,
+        `余额 ${balanceAmount(relay.balance, language)}`,
       );
+    if (relay.authRequired) return t("Sign-in expired", "认证已失效");
     if (relay.notice)
       return (
         <Unavailable reason={relay.notice}>
@@ -114,6 +117,12 @@ export function RelaysPane({ snapshot, action }: SettingsPaneProps) {
             >
               {t("Add a relay", "添加中转站")}
             </SmallButton>
+            <SmallButton
+              disabled={pending || Boolean(custom)}
+              onClick={() => setCustom("new")}
+            >
+              {t("Add balance source", "添加余额来源")}
+            </SmallButton>
           </span>
         }
         footer={
@@ -142,28 +151,62 @@ export function RelaysPane({ snapshot, action }: SettingsPaneProps) {
             }
           />
         )}
+        {custom && (
+          <CustomRelayForm
+            key={custom === "new" ? "new" : custom.id}
+            source={custom === "new" ? undefined : custom}
+            action={action}
+            t={t}
+            pending={pending}
+            onCancel={() => setCustom(null)}
+            onSave={(payload) =>
+              void perform(() => action("add_relay_source", payload)).then(
+                (saved) => {
+                  if (saved) setCustom(null);
+                },
+              )
+            }
+          />
+        )}
         {relays.map((relay) => {
           const agreed = relay.manual || consented.includes(relay.provider);
           // The type is chosen by hand only when sniffing found none, or to
           // change a choice made before.
           const choosable = (relay.unrecognized || relay.chosen) && agreed;
           return (
-            <Fragment key={relay.provider}>
+            <Fragment key={relay.id ?? relay.provider}>
               <Row
                 title={relay.name ?? relay.provider}
                 tag={origin(relay)}
                 detail={facts(relay, agreed)}
               >
-                {choosable && choosing !== relay.provider && (
-                  <LinkButton
-                    disabled={pending}
-                    onClick={() => setChoosing(relay.provider)}
-                  >
-                    {relay.chosen
-                      ? t("Change type", "更改类型")
-                      : t("Choose type", "选择类型")}
+                {relay.custom?.website && (
+                  <LinkButton href={relay.custom.website}>
+                    {t("Open sign-in", "打开登录页")}
                   </LinkButton>
                 )}
+                {relay.manual && relay.chosen === "custom" && (
+                  <LinkButton
+                    disabled={pending}
+                    onClick={() => setCustom(relay)}
+                  >
+                    {relay.authRequired
+                      ? t("Update credentials", "更新认证")
+                      : t("Edit balance source", "编辑余额来源")}
+                  </LinkButton>
+                )}
+                {choosable &&
+                  !(relay.manual && relay.chosen === "custom") &&
+                  choosing !== relay.provider && (
+                    <LinkButton
+                      disabled={pending}
+                      onClick={() => setChoosing(relay.provider)}
+                    >
+                      {relay.chosen
+                        ? t("Change type", "更改类型")
+                        : t("Choose type", "选择类型")}
+                    </LinkButton>
+                  )}
                 {relay.manual ? (
                   <SmallButton
                     disabled={pending}

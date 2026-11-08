@@ -250,6 +250,7 @@ impl crate::AgentHudCore {
         let billing = self.billing_rows(at, &pending_meter, &relay_users);
         let accounts = self.account_rows();
         let relays = self.relay_rows(&relay_users);
+        self.island_events.relay_sign_ins(&relays, now);
         let island_events = self
             .island_events
             .update(&sessions, &quotas, &accounts, &providers, now);

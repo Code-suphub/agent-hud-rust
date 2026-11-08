@@ -17,6 +17,7 @@ fn relays_path(ctx: &AccountContext) -> PathBuf {
 
 /// At most this many relays added by hand.
 const RELAY_LIMIT: usize = 32;
+const FILE_LIMIT: u64 = 256 * 1024;
 
 /// The relays added by hand, keys included, for the relay reader alone:
 /// `{sources: [{id, client, name, baseUrl, key, kind, custom}]}`.
@@ -29,14 +30,14 @@ pub(crate) fn relay_sources(ctx: &AccountContext) -> Result<Value, String> {
     };
     if !meta.is_file()
         || meta.file_type().is_symlink()
-        || meta.len() > 256 * 1024
+        || meta.len() > FILE_LIMIT
         || !crate::os::owner_only(&path, &meta)
     {
         return Err(unreadable_relays());
     }
     let mut bytes = Vec::new();
     fs::File::open(&path)
-        .and_then(|file| file.take(256 * 1024 + 1).read_to_end(&mut bytes))
+        .and_then(|file| file.take(FILE_LIMIT + 1).read_to_end(&mut bytes))
         .map_err(|_| unreadable_relays())?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| unreadable_relays())?;
     if !value["sources"].is_array() {
@@ -61,6 +62,11 @@ pub(crate) fn add_relay_source(ctx: &AccountContext, params: &Value) -> Result<V
     let mut source = relay_source(params)?;
     let mut sources = relay_sources(ctx)?;
     let list = sources["sources"].as_array_mut().unwrap();
+    if let Some(id) = params["id"].as_str() {
+        super::relay_preview::replace(list, id, params, source)?;
+        write_relays(ctx, &sources)?;
+        return Ok(json!({"kind":"ack","id":id}));
+    }
     if list.len() >= RELAY_LIMIT {
         return Err(l10n::text(
             "手动添加的中转站已达上限",
@@ -72,7 +78,7 @@ pub(crate) fn add_relay_source(ctx: &AccountContext, params: &Value) -> Result<V
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis()
+            .as_nanos()
     );
     source["id"] = json!(id);
     list.push(source);
@@ -136,13 +142,26 @@ pub(super) fn relay_kind(params: &Value) -> Result<(String, Option<Value>), Stri
             || https_address(endpoint).is_some()
                 && base_url_host(endpoint).as_deref() == Some(host.as_str());
         let remaining = custom["remaining"].as_str().map(str::trim).unwrap_or("");
-        let path_ok = !remaining.is_empty()
-            && remaining.len() <= 120
-            && remaining
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'));
+        let path_ok = |path: &str| {
+            !path.is_empty()
+                && path.len() <= 120
+                && path
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'))
+        };
         let divisor = custom["divisor"].as_f64().unwrap_or(1.0);
-        let currency = custom["currency"].as_str().unwrap_or("USD");
+        let currency = custom["currency"].as_str().unwrap_or("USD").trim();
+        let total = custom["total"]
+            .as_str()
+            .map(str::trim)
+            .filter(|path| !path.is_empty());
+        let precision = custom["precision"].as_u64();
+        let website = custom["website"]
+            .as_str()
+            .map(str::trim)
+            .filter(|site| !site.is_empty());
+        let website_ok =
+            website.is_none_or(|site| site.len() <= 2048 && https_address(site).is_some());
         let header = custom["header"]
             .as_str()
             .map(str::trim)
@@ -151,17 +170,29 @@ pub(super) fn relay_kind(params: &Value) -> Result<(String, Option<Value>), Stri
             h.len() <= 64 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
         });
         if !endpoint_ok
-            || !path_ok
+            || !path_ok(remaining)
+            || total.is_some_and(|path| !path_ok(path))
+            || (!custom["precision"].is_null() && precision.is_none_or(|value| value > 6))
+            || !website_ok
             || !(divisor.is_finite() && divisor > 0.0)
-            || !matches!(currency, "USD" | "CNY")
+            || !(clean(currency) && currency.chars().count() <= 16)
             || !header_ok
         {
             return Err(invalid(
-                "A custom relay needs its balance endpoint on its own address, the JSON path of the balance, a positive divisor and USD or CNY",
-                "自定义中转站需要它自己地址上的余额接口、余额在返回 JSON 里的位置、大于 0 的除数，以及 USD 或 CNY",
+                "A custom relay needs its balance endpoint on its own address, the JSON path of the balance, a positive divisor and a unit",
+                "自定义中转站需要它自己地址上的余额接口、余额在返回 JSON 里的位置、大于 0 的除数，以及单位",
             ));
         }
         choice["custom"] = json!({"url": endpoint, "remaining": remaining, "divisor": divisor, "currency": currency, "header": header});
+        for (key, value) in [
+            ("total", json!(total)),
+            ("precision", json!(precision)),
+            ("website", json!(website)),
+        ] {
+            if !value.is_null() {
+                choice["custom"][key] = value;
+            }
+        }
     }
     Ok((host, Some(choice)))
 }
@@ -203,15 +234,42 @@ pub(super) fn relay_source(params: &Value) -> Result<Value, String> {
             "中转站地址必须是 HTTPS 地址",
         )
     })?;
-    let key =
-        text("key", 4096).ok_or_else(|| invalid("Enter the relay's key", "请填写中转站的 key"))?;
+    let custom = params["kind"] == "custom";
+    let key = if custom {
+        text("key", 4096).unwrap_or("")
+    } else {
+        text("key", 4096).ok_or_else(|| invalid("Enter the relay's key", "请填写中转站的 key"))?
+    };
     // Which agents use it is seen from their configuration and calls.
-    Ok(json!({"name": name, "baseUrl": address, "key": key}))
+    let mut source = json!({"name": name, "baseUrl": address, "key": key});
+    if custom {
+        let host = agent_hud_agents::endpoints::base_url_host(&address).ok_or("Invalid host")?;
+        let (_, choice) =
+            relay_kind(&json!({"host":host,"kind":"custom","custom":params["custom"]}))?;
+        source["kind"] = json!("custom");
+        source["custom"] = choice.unwrap_or_default()["custom"].clone();
+        if let Some(headers) = params.get("headers") {
+            let headers = headers
+                .as_object()
+                .filter(|headers| headers.len() <= 12)
+                .ok_or_else(|| invalid("Too many request headers", "请求头数量过多"))?;
+            let saved = super::relay_preview::safe_headers(headers)?;
+            source["headers"] = Value::Object(saved);
+        }
+    }
+    Ok(source)
 }
 
 /// Replaces the relays file, privately and at once.
 fn write_relays(ctx: &AccountContext, sources: &Value) -> Result<(), String> {
     private_folder(&folder(ctx))?;
-    crate::claude_plugin::write_private(&relays_path(ctx), sources.to_string().as_bytes())
+    let data = sources.to_string();
+    if data.len() as u64 > FILE_LIMIT {
+        return Err(l10n::text(
+            "余额来源配置过大",
+            "Balance source settings exceed the local size limit",
+        ));
+    }
+    crate::claude_plugin::write_private(&relays_path(ctx), data.as_bytes())
         .map_err(|_| l10n::text("无法保存中转站", "Could not save the relays"))
 }

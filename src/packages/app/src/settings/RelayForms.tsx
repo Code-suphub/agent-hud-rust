@@ -74,7 +74,7 @@ export function RelayKindForm({
   const [remaining, setRemaining] = useState(saved?.remaining ?? "");
   const [divisor, setDivisor] = useState(String(saved?.divisor ?? 1));
   const [currency, setCurrency] = useState<"USD" | "CNY">(
-    saved?.currency ?? "USD",
+    saved?.currency === "CNY" ? "CNY" : "USD",
   );
   const [header, setHeader] = useState(saved?.header ?? "");
   const kinds: [RelayKind, string][] = [

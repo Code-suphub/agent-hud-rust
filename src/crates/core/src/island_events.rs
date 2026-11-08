@@ -33,6 +33,7 @@ pub(super) struct Tracker {
     quotas: HashMap<String, Observation>,
     credits: HashMap<String, Credits>,
     sign_ins: HashMap<String, SignIn>,
+    relay_sign_ins: HashSet<String>,
     /// When each agent's waiting hooks were last told.
     reviews: HashMap<String, i64>,
     revision: u64,
@@ -49,6 +50,7 @@ impl Tracker {
             quotas: HashMap::new(),
             credits: HashMap::new(),
             sign_ins: HashMap::new(),
+            relay_sign_ins: HashSet::new(),
             reviews: HashMap::new(),
             revision: 0,
             events: VecDeque::new(),

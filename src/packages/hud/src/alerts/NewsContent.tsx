@@ -1,12 +1,9 @@
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { CompletionAlertView } from "./CompletionAlertView";
+import { SignInAlertView } from "./SignInAlertView";
 import { HooksReviewAlertView } from "./HooksReviewAlertView";
-import {
-  QuotaAlertView,
-  ResetCreditAlertView,
-  SignInAlertView,
-} from "./QuotaAlertViews";
+import { QuotaAlertView, ResetCreditAlertView } from "./QuotaAlertViews";
 
 /** An island event's card, by its kind. */
 export function NewsContent({

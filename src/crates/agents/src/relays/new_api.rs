@@ -107,6 +107,8 @@ pub(super) fn new_api(
         kind: "newapi",
         label: name.unwrap_or(relay).to_owned(),
         amount,
-        currency,
+        currency: currency.into(),
+        total: None,
+        precision: None,
     })
 }

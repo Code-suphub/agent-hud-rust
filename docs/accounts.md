@@ -312,3 +312,15 @@ A relay can also be added by hand on the Relays page, for any agent: its HTTPS a
 
 Settings → Prices lists every model the selected logs used in the last 30 days, with its tokens, its price per million tokens and where that comes from. A price is looked for in this order: the owner's own price for the model on that route, then on every route (`customPrices`); free on this computer (a named model server, or a local host the owner calls one in `localKinds`, or by default a local host whose model has no list price); the relay's own list; the vendor's list times the owner's multiplier for the relay (`relayMultipliers`); the vendor's list through its own API or plan. A change prices every log again.
 
+
+### Custom balance sources
+
+In Settings → Relays → Add balance source, paste an HTTPS GET copied as
+cURL or enter the endpoint. Preview the response to find numeric JSON paths
+for the remaining balance and optional total. The display can use a currency
+or a unit such as credits, with zero to six decimal places. Credentials stay
+in the private local relay store. A 401 or 403 can prompt for an update in the HUD.
+
+Usage → Quota reset history is for subscription windows. It shows recorded
+cycles by account and quota window, with local reference usage and full-cycle
+estimates where the logs can be linked to the window.
