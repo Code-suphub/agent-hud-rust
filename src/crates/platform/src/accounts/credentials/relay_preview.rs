@@ -118,17 +118,19 @@ pub(super) fn replace(
     if params.get("headers").is_none() {
         source["headers"] = existing["headers"].clone();
     }
-    if let Some(cookie) = params["cookie"].as_str().filter(|value| !value.is_empty()) {
-        let headers = safe_headers(&Map::from_iter([(
-            "cookie".into(),
-            Value::String(cookie.to_owned()),
-        )]))?;
-        source["headers"]["cookie"] = headers["cookie"].clone();
+    if params.get("cookie").is_some() {
+        set_cookie(&mut source, &params["cookie"])?;
     }
     if source["key"] == "" {
         source["key"] = existing["key"].clone();
     }
     source["id"] = Value::String(id.to_owned());
     *existing = source;
+    Ok(())
+}
+
+pub(super) fn set_cookie(source: &mut Value, cookie: &Value) -> Result<(), String> {
+    let headers = safe_headers(&Map::from_iter([("cookie".into(), cookie.clone())]))?;
+    source["headers"]["cookie"] = headers["cookie"].clone();
     Ok(())
 }

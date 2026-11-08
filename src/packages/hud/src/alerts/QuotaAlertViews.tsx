@@ -1,6 +1,6 @@
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { agentVendorName } from "../model";
-import { alertFill, alertInk, alertText, onAlertFill } from "../tokens";
+import { alertFill, alertInk, alertText } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { palette } from "../panel/theme";

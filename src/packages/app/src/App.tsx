@@ -159,6 +159,8 @@ function AppContent({
       }
     },
     query: (method, params) => act(method, params),
+    updateBalanceCookie: (id, cookie) =>
+      act("update_relay_cookie", { id, cookie }),
     openSettingsPage: (page) => {
       if (isTauri()) void invoke("hud_show_main", { page });
     },

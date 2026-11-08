@@ -38,6 +38,7 @@ export interface PanelServices {
   openSession?(session: Session): void | Promise<boolean | void>;
   /** Settings, on the page with this id, such as "agent-plugins". */
   openSettingsPage?(page: string): void;
+  updateBalanceCookie?(id: string, cookie: string): Promise<unknown>;
   /** Agent HUD's own sign-in window on `host`, for `provider`'s quota. */
   webSignIn?(provider: string, host: string): void;
   /** The client's own app, brought forward or started, for a step only the

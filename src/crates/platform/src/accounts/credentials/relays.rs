@@ -197,6 +197,20 @@ pub(super) fn relay_kind(params: &Value) -> Result<(String, Option<Value>), Stri
     Ok((host, Some(choice)))
 }
 
+pub(crate) fn update_relay_cookie(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
+    let id = params["id"].as_str().ok_or("id is required")?;
+    let mut sources = relay_sources(ctx)?;
+    let entry = sources["sources"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == id && entry["kind"] == "custom")
+        .ok_or_else(|| l10n::text("找不到余额来源", "Balance source not found"))?;
+    super::relay_preview::set_cookie(entry, &params["cookie"])?;
+    write_relays(ctx, &sources)?;
+    Ok(json!({"kind":"ack","id":id}))
+}
+
 /// Removes a relay added by hand, by its `id`.
 pub(crate) fn remove_relay_source(ctx: &AccountContext, params: &Value) -> Result<Value, String> {
     let id = params["id"].as_str().ok_or("id is required")?;
@@ -234,7 +248,7 @@ pub(super) fn relay_source(params: &Value) -> Result<Value, String> {
             "中转站地址必须是 HTTPS 地址",
         )
     })?;
-    let custom = params["kind"] == "custom";
+    let custom = params["kind"] == "custom" && params["custom"].is_object();
     let key = if custom {
         text("key", 4096).unwrap_or("")
     } else {

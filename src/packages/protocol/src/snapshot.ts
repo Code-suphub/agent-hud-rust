@@ -160,6 +160,7 @@ export type NativeMethod =
   | "remove_credentials"
   | "add_relay_source"
   | "preview_relay_source"
+  | "update_relay_cookie"
   | "set_relay_kind"
   | "remove_relay_source"
   | "web_sign_out";

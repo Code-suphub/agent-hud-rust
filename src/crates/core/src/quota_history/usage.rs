@@ -1,41 +1,20 @@
 use super::cycles::Cycle;
 use crate::database::{metering, quota_link::QuotaLink};
-use crate::pricing::{self, PriceRegions};
+use crate::pricing::PriceRegions;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub(super) fn reference(
     db: &Connection,
-    paths: &[String],
+    view: &metering::View,
     regions: &PriceRegions,
     link: &QuotaLink<'_>,
     cycle: &Cycle,
     until: i64,
 ) -> Option<Value> {
-    let calls =
-        metering::query_events_between(db, paths, cycle.start, cycle.end.min(until)).ok()?;
-    let mut tokens = 0u64;
-    let mut amounts = BTreeMap::<String, i128>::new();
-    for call in calls {
-        if !link.matches(&call.source, &call.model) {
-            continue;
-        }
-        tokens = tokens.checked_add(call.usage.total())?;
-        if let Some(cost) = pricing::cost_at(
-            &call.source,
-            &call.model,
-            &metering::price_tokens(call.usage),
-            true,
-            regions.region(&call.source, &call.model),
-            Some(call.at),
-        ) {
-            *amounts.entry(cost.currency).or_default() += cost.amount_pico;
-        }
-    }
-    if tokens == 0 {
-        return None;
-    }
+    let (tokens, amounts) =
+        view.quota_usage(db, regions, link, [cycle.start, cycle.end.min(until)])?;
     let scale = (5.0..=100.0)
         .contains(&cycle.used)
         .then(|| 100.0 / cycle.used);
@@ -120,14 +99,8 @@ impl crate::AgentHudCore {
                 let mut value = cycle.json(now);
                 if let Some((view, link)) = ledger {
                     let until = to.min(now).min(cycle.last.saturating_add(1));
-                    value["reference"] = json!(reference(
-                        db,
-                        &view.selection,
-                        &self.price_regions,
-                        link,
-                        cycle,
-                        until
-                    ));
+                    value["reference"] =
+                        json!(reference(db, view, &self.price_regions, link, cycle, until));
                 }
                 value
             })

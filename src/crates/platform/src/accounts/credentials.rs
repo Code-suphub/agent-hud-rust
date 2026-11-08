@@ -13,7 +13,9 @@ mod relay_preview;
 mod relays;
 pub(super) use relay_preview::preview;
 
-pub(super) use relays::{add_relay_source, relay_sources, remove_relay_source, set_relay_kind};
+pub(super) use relays::{
+    add_relay_source, relay_sources, remove_relay_source, set_relay_kind, update_relay_cookie,
+};
 
 const PROVIDERS: [&str; 4] = ["deepseek", "kimi", "glm", "opencode"];
 fn folder(ctx: &AccountContext) -> PathBuf {

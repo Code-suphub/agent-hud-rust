@@ -42,14 +42,15 @@ impl CapacityInterval {
 }
 
 impl View {
-    pub(super) fn capacity_estimate(
+    /// Sum the logged calls that spend this window over one exact interval.
+    pub(crate) fn quota_usage(
         &self,
         db: &Connection,
         regions: &PriceRegions,
         link: &QuotaLink<'_>,
-        interval: CapacityInterval,
-    ) -> Option<Value> {
-        let calls = query_events_between(db, &self.selection, interval.from, interval.to).ok()?;
+        [from, to]: [i64; 2],
+    ) -> Option<(u64, BTreeMap<String, i128>)> {
+        let calls = query_events_between(db, &self.selection, from, to).ok()?;
         let mut tokens = 0u64;
         let mut amounts = BTreeMap::<String, i128>::new();
         for call in calls {
@@ -71,6 +72,18 @@ impl View {
         if tokens == 0 {
             return None;
         }
+        Some((tokens, amounts))
+    }
+
+    pub(super) fn capacity_estimate(
+        &self,
+        db: &Connection,
+        regions: &PriceRegions,
+        link: &QuotaLink<'_>,
+        interval: CapacityInterval,
+    ) -> Option<Value> {
+        let (tokens, amounts) =
+            self.quota_usage(db, regions, link, [interval.from, interval.to])?;
         let scale = 100.0 / interval.used;
         let amounts = amounts
             .into_iter()

@@ -126,6 +126,11 @@ impl AccountService {
         self.account_changed("relay");
         Ok(result)
     }
+    pub fn update_relay_cookie(&self, params: &Value) -> Result<Value, String> {
+        let result = credentials::update_relay_cookie(&self.context, params)?;
+        self.account_changed("relay");
+        Ok(result)
+    }
     /// Keeps the template chosen for a relay's address
     /// (`credentials::set_relay_kind`) and reads the relays again.
     pub fn set_relay_kind(&self, params: &Value) -> Result<Value, String> {
